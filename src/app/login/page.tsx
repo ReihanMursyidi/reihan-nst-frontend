@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { isAxiosError } from "axios";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -122,6 +123,16 @@ export default function LoginPage() {
             {isSubmitting ? "Processing..." : "Login"}
           </button>
         </form>
+
+        <p className="text-center text-sm text-gray-600">
+          Register new Account here{" "}
+          <Link
+            href="/register"
+            className="font-medium text-blue-600 hover:text-blue-700"
+          >
+            Register
+          </Link>
+        </p>
 
         <div className="mt-4 text-xs text-gray-500 text-center">
           <p>Testing Accounts:</p>
