@@ -19,6 +19,11 @@ const createTaskSchema = z.object({
 
 const editTaskSchema = z.object({
   title: z.string().min(1, "Task title is required"),
+  assigneeId: z
+    .string()
+    .uuid("Assignee ID invalid")
+    .optional()
+    .or(z.literal("")),
   isClientVisible: z.boolean(),
   version: z.number().int(),
 });
@@ -34,6 +39,7 @@ type Task = {
   projectId?: string;
   project?: { name?: string | null } | null;
   assignee?: { name: string } | null;
+  assigneeId?: string | null;
   isClientVisible: boolean;
 };
 
@@ -165,6 +171,7 @@ export default function DashboardPage() {
   const handleOpenEditModal = (task: Task) => {
     setSelectedTask(task);
     setEditValue("title", task.title);
+    setEditValue("assigneeId", task.assigneeId || "");
     setEditValue("isClientVisible", task.isClientVisible);
     setEditValue("version", task.version);
     setFormError("");
@@ -506,6 +513,28 @@ export default function DashboardPage() {
                   {...registerEdit("title")}
                   className="mt-1 w-full border p-2 rounded"
                 />
+                <div>
+                  <label
+                    htmlFor="edit-task-assignee-id"
+                    className="block text-sm font-medium"
+                  >
+                    Assignee ID (UUID)
+                  </label>
+                  <input
+                    id="edit-task-assignee-id"
+                    {...registerEdit("assigneeId")}
+                    className="mt-1 w-full border p-2 rounded"
+                    placeholder="Leave blank if unassigned"
+                  />
+                  {editErrors.assigneeId && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {editErrors.assigneeId.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">
+                    *Enter the Internal Team account UUID
+                  </p>
+                </div>
                 {editErrors.title && (
                   <p className="text-red-500 text-xs mt-1">
                     {editErrors.title.message}
