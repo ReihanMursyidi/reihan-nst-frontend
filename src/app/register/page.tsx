@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { isAxiosError } from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,13 +10,18 @@ import z from "zod";
 import { api } from "@/lib/axios";
 
 // Register validation schema
-const registerSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email format"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  role: z.enum(["PM", "INTERNAL", "CLIENT"]),
-  department: z.string().optional(),
-});
+const registerSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    email: z.string().email("Invalid email format"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    role: z.enum(["PM", "INTERNAL", "CLIENT"]),
+    department: z.string().optional(),
+  })
+  .refine((data) => data.role !== "INTERNAL" || !!data.department?.trim(), {
+    message: "Department is required for Internal Team users",
+    path: ["department"],
+  });
 
 type RegisterInputs = z.infer<typeof registerSchema>;
 
@@ -51,19 +57,16 @@ export default function RegisterPage() {
       setSuccessMsg("Registration successful! Redirecting to login page...");
       setTimeout(() => router.push("/login"), 2000);
     } catch (error: unknown) {
-      const axiosError =
-        error && typeof error === "object" && "response" in error
-          ? error
-          : undefined;
-      const mainError =
-        axiosError && typeof axiosError.response?.data === "object"
-          ? (axiosError.response?.data as { error?: string; details?: unknown })
-              .error || "Registration failed"
-          : "Registration failed";
-      const errorDetails =
-        axiosError && typeof axiosError.response?.data === "object"
-          ? (axiosError.response?.data as { details?: unknown }).details
-          : undefined;
+      const mainError = isAxiosError<{ error?: string; details?: unknown }>(
+        error,
+      )
+        ? error.response?.data?.error || "Registration failed"
+        : "Registration failed";
+      const errorDetails = isAxiosError<{ error?: string; details?: unknown }>(
+        error,
+      )
+        ? error.response?.data?.details
+        : undefined;
 
       if (errorDetails) {
         setGlobalError(`${mainError} : ${JSON.stringify(errorDetails)}`);
@@ -188,6 +191,11 @@ export default function RegisterPage() {
                 <option value="Frontend">Frontend Engineering</option>
                 <option value="Backend">Backend Engineering</option>
               </select>
+              {errors.department && (
+                <p className="text-xs text-red-500 mt-1">
+                  {errors.department.message}
+                </p>
+              )}
             </div>
           )}
 
@@ -196,7 +204,7 @@ export default function RegisterPage() {
             disabled={isSubmitting}
             className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 mt-6 font-medium"
           >
-            {isSubmitting ? "Proccessing..." : "Register Now"}
+            {isSubmitting ? "Processing..." : "Register Now"}
           </button>
         </form>
 
