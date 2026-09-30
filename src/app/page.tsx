@@ -61,6 +61,8 @@ export default function DashboardPage() {
     text: string;
   } | null>(null);
 
+  const [isMounted, setIsMounted] = useState(false);
+
   // State Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -90,6 +92,10 @@ export default function DashboardPage() {
     resolver: zodResolver(editTaskSchema),
   });
 
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Get data task
   const fetchTasks = useCallback(async () => {
     try {
@@ -104,12 +110,14 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (!isMounted) return;
+
     if (!user) {
       router.push("/login");
       return;
     }
     void fetchTasks();
-  }, [fetchTasks, router, user]);
+  }, [fetchTasks, router, user, isMounted]);
 
   // Handler: Create
   const handleOpenCreateModal = () => {
@@ -224,6 +232,7 @@ export default function DashboardPage() {
     router.push("/login");
   };
 
+  if (!isMounted) return null;
   if (!user) return null;
 
   return (
@@ -236,7 +245,11 @@ export default function DashboardPage() {
             <p className="text-sm text-gray-500 mt-1">
               Login as:{" "}
               <span className="font-semibold text-blue-600">{user.name}</span>{" "}
-              (Role: {user.role})
+              (Role: {user.role}
+              {user.role === "INTERNAL" && user.department
+                ? ` - ${user.department}`
+                : ""}
+              )
             </p>
           </div>
 
@@ -351,7 +364,7 @@ export default function DashboardPage() {
                       ) : (
                         <span className="text-gray-400 italic text-xs">
                           {user.role === "CLIENT"
-                            ? "Rahasia Internal"
+                            ? "Internal Secret"
                             : "Not Assigned"}
                         </span>
                       )}
