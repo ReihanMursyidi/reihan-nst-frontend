@@ -3,16 +3,26 @@
 **Author:** Reihan Mursyidi  
 **Assessment:** Fullstack Engineer
 
-This repository contains the deliverables for the Fullstack Engineer Assessment. The system is a robust, production-ready task management application designed to handle complex collaborative workflows, inter-task dependencies, and high-concurrency data modifications.
+NodeWave is a role-based task management system for collaborative project workflows. It supports task assignment, dependency-aware status transitions, attachment sharing, optimistic locking, audit logging, and client-safe task visibility.
 
-## 📌 Deliverables
+## Deliverables
 
-### 1. Live Application URLs
-- **Frontend (Live App):** [MASUKKAN_LINK_VERCEL_DI_SINI]
+### Live Application URLs
+<<<<<<< HEAD
+
+- **Frontend:** https://reihan-nst-assessment.vercel.app
+- **Backend API:** https://reihan-nst-backend.vercel.app
+
+### Private GitHub Repositories
+
+=======
+
+- **Frontend:** [MASUKKAN_LINK_VERCEL_DI_SINI]
 - **Backend API:** [MASUKKAN_LINK_RAILWAY/RENDER_DI_SINI]
 
 ### Private GitHub Repositories
 
+>>>>>>> fa5704da430b37616889a442c7a767affe8e40bc
 - **Frontend:** https://github.com/ReihanMursyidi/reihan-nst-frontend
 - **Backend:** https://github.com/ReihanMursyidi/reihan-nst-backend
 
