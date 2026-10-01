@@ -1,36 +1,111 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NodeWave Task Management System
 
-## Getting Started
+**Author:** Reihan Mursyidi  
+**Assessment:** Fullstack Engineer
 
-First, run the development server:
+NodeWave is a role-based task management system for collaborative project workflows. It supports task assignment, dependency-aware status transitions, attachment sharing, optimistic locking, audit logging, and client-safe task visibility.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Deliverables
+
+### Live Application URLs
+
+- **Frontend:** [MASUKKAN_LINK_VERCEL_DI_SINI]
+- **Backend API:** [MASUKKAN_LINK_RAILWAY/RENDER_DI_SINI]
+
+### Private GitHub Repositories
+
+- **Frontend:** https://github.com/ReihanMursyidi/reihan-nst-frontend
+- **Backend:** https://github.com/ReihanMursyidi/reihan-nst-backend
+
+Collaborators `rigenski` and `nodewavescout` have been invited to both repositories.
+
+### Seeded Test Accounts
+
+The following accounts can be used to verify the main application flows:
+
+| Role | Email | Password | Access Level |
+| --- | --- | --- | --- |
+| **Product Manager (PM)** | `pm@nst.com` | `password123` | Create, edit, assign, and delete tasks |
+| **Internal Team (UI/UX)** | `uiux@nst.com` | `password123` | View assigned tasks and upload attachments |
+| **Internal Team (Frontend)** | `frontend@nst.com` | `password123` | View assigned tasks and upload attachments |
+| **Client Guest** | `client@nst.com` | `password123` | View client-visible tasks only |
+
+## Application Screenshots
+
+### 1. Authentication
+
+**Login**
+
+![Login page](./screenshots/login-page.png)
+
+**Registration**
+
+![Registration page](./screenshots/register-page.png)
+
+### 2. Task Board and Dependencies (PM View)
+
+![PM task dashboard](./screenshots/pm-dashboard.png)
+
+### 3. State-Based Permission: Blocked Task (Internal View)
+
+![Blocked task notification](./screenshots/dependency-blocker.png)
+
+### 4. Data Isolation and Masking (Client View)
+
+![Client dashboard](./screenshots/client-dashboard.png)
+
+### 5. Attachment Upload (ABAC Implementation)
+
+![Attachment upload success](./screenshots/upload-attachment.png)
+
+## Architecture and Core Business Logic
+
+### 1. Role- and Attribute-Based Access Control
+
+The system combines RBAC and ABAC to enforce permissions at both the role and resource levels.
+
+- **RBAC:** The authentication middleware identifies the user from the JWT and resolves the current role from the database. PM-only operations, such as creating tasks, assigning users, and deleting tasks, are restricted at the endpoint level.
+- **ABAC:** Resource access is checked against task attributes. Internal users can access and upload attachments only for tasks assigned to their own `userId`. Clients can see only tasks associated with their account and marked with `isClientVisible = true`.
+
+This combination prevents users from gaining access by changing client-side state or guessing resource identifiers.
+
+### 2. Task Dependencies and State Transitions
+
+Tasks are connected through a `TaskDependency` junction table.
+
+Before a task moves to `IN_PROGRESS`, the backend checks whether all prerequisite tasks are complete. If a task depends on unfinished work, the request is rejected with `403 Forbidden` and a `blockedBy` list describing the remaining blockers.
+
+For example, if Task C depends on Tasks A and B, Task C cannot move to `IN_PROGRESS` until both dependencies have reached `DONE`.
+
+### 3. Optimistic Locking
+
+The `Task` table contains a numeric `version` field to prevent lost updates during concurrent modifications.
+
+Each update request includes the version currently held by the client. The backend updates the record only when both the task ID and expected version match:
+
+```ts
+where: { id: taskId, version: expectedVersion }
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+A stale version produces `409 Conflict`, allowing the client to refresh the task and retry with current data instead of silently overwriting another user's changes.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. Audit Trail and Soft Deletes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+All mutations are recorded in an immutable `AuditLog` table. The audit record includes the acting `userId`, timestamp, and relevant old and new values.
 
-## Learn More
+Task mutations and audit-log creation run in the same database transaction. If either operation fails, the transaction is rolled back to keep the task data and audit history consistent.
 
-To learn more about Next.js, take a look at the following resources:
+Deletion is implemented as a soft delete by setting `deletedAt`. Regular queries exclude deleted records while preserving historical data for auditing.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Technology Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Backend:** TypeScript, Bun, Hono, Prisma, PostgreSQL (Supabase), Zod, and JWT
+- **Frontend:** Next.js 16 App Router, React 19, Zustand 5, Tailwind CSS 4, React Hook Form, and Axios
+- **Quality and CI:** Biome, Vitest, Bun tests, and GitHub Actions
 
-## Deploy on Vercel
+## Main User Flows
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- PM creates tasks, assigns internal team members, manages dependencies, and updates task visibility.
+- Internal team members view their assigned tasks, update progress, and upload work links or attachments.
+- Clients view only tasks explicitly marked as visible to clients.
+- Concurrent edits are detected through optimistic locking and returned as conflicts instead of overwriting newer data.
