@@ -44,6 +44,13 @@ type Task = {
   attachments?: string[];
 };
 
+type Assignee = {
+  id: string;
+  name: string;
+  department?: string | null;
+  role?: string;
+};
+
 // Tipe khusus untuk response error
 type ApiErrorResponse = {
   error?: string;
@@ -75,6 +82,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isMounted, setIsMounted] = useState(false);
@@ -133,6 +141,20 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const fetchAssignees = useCallback(async () => {
+    // Hanya ambil daftar assignee jika yang login adalah PM
+    if (user?.role === "PM") {
+      try {
+        const response = await api.get<{ data: Assignee[] }>(
+          "/users/assignees",
+        );
+        setAssignees(response.data.data);
+      } catch (error) {
+        console.error("Gagal mengambil data assignee", error);
+      }
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!isMounted) return;
     if (!user) {
@@ -140,7 +162,8 @@ export default function DashboardPage() {
       return;
     }
     void fetchTasks();
-  }, [fetchTasks, router, user, isMounted]);
+    if (user.role === "PM") void fetchAssignees();
+  }, [fetchAssignees, fetchTasks, router, user, isMounted]);
 
   // Handler: Create
   const handleOpenCreateModal = () => {
@@ -647,14 +670,21 @@ export default function DashboardPage() {
                   htmlFor="edit-task-assignee-id"
                   className="block text-sm font-medium"
                 >
-                  Assignee ID (UUID)
+                  Assignee
                 </label>
-                <input
+                <select
                   id="edit-task-assignee-id"
                   {...registerEdit("assigneeId")}
                   className="mt-1 w-full border p-2 rounded"
-                  placeholder="Kosongkan jika unassigned"
-                />
+                >
+                  <option value="">Unassigned</option>
+                  {assignees.map((assignee) => (
+                    <option key={assignee.id} value={assignee.id}>
+                      {assignee.name} - {assignee.role} -{" "}
+                      {assignee.department || "No department"}
+                    </option>
+                  ))}
+                </select>
                 {editErrors.assigneeId && (
                   <p className="text-red-500 text-xs mt-1">
                     {editErrors.assigneeId.message}
