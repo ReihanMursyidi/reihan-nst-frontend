@@ -9,8 +9,8 @@ NodeWave is a role-based task management system for collaborative project workfl
 
 ### Live Application URLs
 
-- **Frontend:** [MASUKKAN_LINK_VERCEL_DI_SINI]
-- **Backend API:** [MASUKKAN_LINK_RAILWAY/RENDER_DI_SINI]
+- **Frontend:** https://reihan-nst-assessment.vercel.app
+- **Backend API:** https://reihan-nst-backend.vercel.app
 
 ### Private GitHub Repositories
 
