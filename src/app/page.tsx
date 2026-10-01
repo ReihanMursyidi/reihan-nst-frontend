@@ -41,12 +41,34 @@ type Task = {
   assignee?: { name: string } | null;
   assigneeId?: string | null;
   isClientVisible: boolean;
+  attachments?: string[];
 };
 
 // Tipe khusus untuk response error
 type ApiErrorResponse = {
   error?: string;
+  message?: string;
   blockedBy?: string[];
+  errors?: string | string[];
+};
+
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (!isAxiosError<ApiErrorResponse>(error)) return fallback;
+
+  const responseData = error.response?.data;
+  if (!responseData) return error.message || fallback;
+
+  if (Array.isArray(responseData.errors)) {
+    return responseData.errors.join(", ");
+  }
+
+  return (
+    responseData.error ||
+    responseData.message ||
+    responseData.errors ||
+    error.message ||
+    fallback
+  );
 };
 
 export default function DashboardPage() {
@@ -55,19 +77,21 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
+  const [isMounted, setIsMounted] = useState(false);
   const [actionMessage, setActionMessage] = useState<{
     type: "error" | "success";
     text: string;
   } | null>(null);
 
-  const [isMounted, setIsMounted] = useState(false);
-
   // State Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [formError, setFormError] = useState("");
+  const [uploadUrl, setUploadUrl] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   // Hook Form: Create
   const {
@@ -111,7 +135,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isMounted) return;
-
     if (!user) {
       router.push("/login");
       return;
@@ -190,7 +213,13 @@ export default function DashboardPage() {
     if (!selectedTask) return;
     try {
       setFormError("");
-      await api.patch(`/tasks/${selectedTask.id}`, data);
+      const payload = {
+        title: data.title,
+        assigneeId: data.assigneeId || null,
+        isClientVisible: data.isClientVisible,
+        version: data.version,
+      };
+      await api.patch(`/tasks/${selectedTask.id}`, payload);
       setIsEditModalOpen(false);
       resetEdit();
       void fetchTasks();
@@ -199,11 +228,14 @@ export default function DashboardPage() {
         text: "Task details successfully updated!",
       });
     } catch (error: unknown) {
-      const message = isAxiosError<ApiErrorResponse>(error)
-        ? error.response?.data?.error
-        : undefined;
-      setFormError(message || "Failed to update task details");
-      if (message?.includes("Conflict")) void fetchTasks(); // Auto-refresh if Race Condition occurs
+      const message = getApiErrorMessage(
+        error,
+        "Failed to update task details",
+      );
+      setFormError(message);
+      if (isAxiosError(error) && error.response?.status === 409) {
+        void fetchTasks();
+      }
     }
   };
 
@@ -227,13 +259,40 @@ export default function DashboardPage() {
     }
   };
 
+  // Handler Upload Attachment (Internal Team Only)
+  const handleUploadAttachment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTask || !uploadUrl) return;
+
+    try {
+      setIsUploading(true);
+      setFormError("");
+      await api.post(`/tasks/${selectedTask.id}/attachments`, {
+        attachmentUrl: uploadUrl,
+      });
+      setIsUploadModalOpen(false);
+      setUploadUrl("");
+      void fetchTasks();
+      setActionMessage({
+        type: "success",
+        text: "Attachment uploaded successfully!",
+      });
+    } catch (error: unknown) {
+      const message = isAxiosError<ApiErrorResponse>(error)
+        ? error.response?.data?.error
+        : undefined;
+      setFormError(message ?? "Failed to upload attachment");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     router.push("/login");
   };
 
-  if (!isMounted) return null;
-  if (!user) return null;
+  if (!isMounted || !user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50 text-black p-8">
@@ -308,6 +367,9 @@ export default function DashboardPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">
                     Assignee
                   </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase">
+                    Attachments
+                  </th>
                   {/* Kolom Actions Eksklusif untuk PM */}
                   {user.role === "PM" && (
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-600 uppercase">
@@ -370,23 +432,65 @@ export default function DashboardPage() {
                       )}
                     </td>
 
-                    {/* Tombol Actions Eksklusif untuk PM */}
-                    {user.role === "PM" && (
+                    <td className="px-4 py-4 text-sm text-gray-600">
+                      {task.attachments && task.attachments.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {task.attachments.map((url, idx) => (
+                            <a
+                              key={`${task.id}-${url}`}
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-600 hover:underline text-xs truncate max-w-37.5 inline-block"
+                            >
+                              🔗 Link {idx + 1}
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 italic text-xs">
+                          Not available
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Kolom Actions */}
+                    {(user.role === "PM" || user.role === "INTERNAL") && (
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditModal(task)}
-                          className="text-indigo-600 hover:text-indigo-900 mr-4"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTask(task.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
+                        {user.role === "PM" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(task)}
+                              className="text-indigo-600 hover:text-indigo-900 mr-4"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+
+                        {user.role === "INTERNAL" &&
+                          task.assigneeId === user.id && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTask(task);
+                                setFormError("");
+                                setIsUploadModalOpen(true);
+                              }}
+                              className="text-green-600 hover:text-green-900 bg-green-50 px-3 py-1 rounded border border-green-200"
+                            >
+                              + Upload
+                            </button>
+                          )}
                       </td>
                     )}
                   </tr>
@@ -411,6 +515,7 @@ export default function DashboardPage() {
                   {formError}
                 </div>
               )}
+
               <div>
                 <label
                   htmlFor="create-task-title"
@@ -430,6 +535,7 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
+
               <div>
                 <label
                   htmlFor="create-task-project-id"
@@ -448,12 +554,13 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
+
               <div>
                 <label
                   htmlFor="create-task-depends-on"
                   className="block text-sm font-medium"
                 >
-                  Task Prerequisites (Dependencies)
+                  Prerequisites (Dependencies)
                 </label>
                 <select
                   id="create-task-depends-on"
@@ -468,6 +575,7 @@ export default function DashboardPage() {
                   ))}
                 </select>
               </div>
+
               <div className="flex items-center mt-4">
                 <input
                   type="checkbox"
@@ -482,6 +590,7 @@ export default function DashboardPage() {
                   Visible to Client
                 </label>
               </div>
+
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
                 <button
                   type="button"
@@ -493,9 +602,9 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={isCreateSubmitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
                 >
-                  {isCreateSubmitting ? "Saving..." : "Save Task"}
+                  Save Task
                 </button>
               </div>
             </form>
@@ -503,7 +612,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Modal Edit Task (Hanya PM) */}
+      {/* Modal Edit Task (PM Only) */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-lg">
@@ -526,34 +635,33 @@ export default function DashboardPage() {
                   {...registerEdit("title")}
                   className="mt-1 w-full border p-2 rounded"
                 />
-                <div>
-                  <label
-                    htmlFor="edit-task-assignee-id"
-                    className="block text-sm font-medium"
-                  >
-                    Assignee ID (UUID)
-                  </label>
-                  <input
-                    id="edit-task-assignee-id"
-                    {...registerEdit("assigneeId")}
-                    className="mt-1 w-full border p-2 rounded"
-                    placeholder="Leave blank if unassigned"
-                  />
-                  {editErrors.assigneeId && (
-                    <p className="text-red-500 text-xs mt-1">
-                      {editErrors.assigneeId.message}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-400 mt-1">
-                    *Enter the Internal Team account UUID
-                  </p>
-                </div>
                 {editErrors.title && (
                   <p className="text-red-500 text-xs mt-1">
                     {editErrors.title.message}
                   </p>
                 )}
               </div>
+
+              <div>
+                <label
+                  htmlFor="edit-task-assignee-id"
+                  className="block text-sm font-medium"
+                >
+                  Assignee ID (UUID)
+                </label>
+                <input
+                  id="edit-task-assignee-id"
+                  {...registerEdit("assigneeId")}
+                  className="mt-1 w-full border p-2 rounded"
+                  placeholder="Kosongkan jika unassigned"
+                />
+                {editErrors.assigneeId && (
+                  <p className="text-red-500 text-xs mt-1">
+                    {editErrors.assigneeId.message}
+                  </p>
+                )}
+              </div>
+
               <div className="flex items-center mt-4">
                 <input
                   type="checkbox"
@@ -568,6 +676,7 @@ export default function DashboardPage() {
                   Visible to Client
                 </label>
               </div>
+
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
                 <button
                   type="button"
@@ -579,9 +688,60 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={isEditSubmitting}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded"
                 >
-                  {isEditSubmitting ? "Updating..." : "Update Task"}
+                  Update Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL UPLOAD ATTACHMENT (Internal Only) */}
+      {isUploadModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">
+              Upload Lampiran Pekerjaan
+            </h2>
+            <form onSubmit={handleUploadAttachment} className="space-y-4">
+              {formError && (
+                <div className="p-2 bg-red-50 text-red-600 text-sm rounded">
+                  {formError}
+                </div>
+              )}
+              <div>
+                <label
+                  htmlFor="upload-task-url"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  URL Tautan Pekerjaan (Figma/GitHub/Drive)
+                </label>
+                <input
+                  id="upload-task-url"
+                  type="url"
+                  required
+                  value={uploadUrl}
+                  onChange={(e) => setUploadUrl(e.target.value)}
+                  className="mt-1 w-full border p-2 rounded"
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsUploadModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUploading || !uploadUrl}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isUploading ? "Mengunggah..." : "Unggah"}
                 </button>
               </div>
             </form>
